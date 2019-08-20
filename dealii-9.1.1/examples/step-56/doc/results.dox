@@ -1,0 +1,214 @@
+<h1>Results</h1>
+
+<h3> Errors </h3>
+
+We first run the code and confirm that the finite element solution converges
+with the correct rates as predicted by the error analysis of mixed finite
+element problems. Given sufficiently smooth exact solutions $u$ and $p$,
+the errors of the Taylor-Hood element $Q_k \times Q_{k-1}$ should be
+
+@f[
+\| u -u_h \|_0 + h ( \| u- u_h\|_1 + \|p - p_h \|_0)
+\leq C h^{k+1} ( \|u \|_{k+1} + \| p \|_k )
+@f]
+
+see for example Ern/Guermond "Theory and Practice of Finite Elements", Section
+4.2.5 p195. This is indeed what we observe, using the $Q_2 \times Q_1$
+element as an example (this is what is done in the code, but is easily
+changed in <code>main()</code>):
+
+<table align="center" class="doxtable">
+  <tr>
+    <th>&nbsp;</th>
+    <th>L2 Velocity</th>
+    <th>Reduction</th>
+    <th>L2 Pressure</th>
+    <th>Reduction</th>
+    <th>H1 Velocity</th>
+    <th>Reduction</th>
+  </tr>
+  <tr>
+    <td>3D, 3 global refinements</td>
+    <td>0.000670888</td>
+    <td align="center">-</td>
+    <td>0.0036533</td>
+    <td align="center">-</td>
+    <td>0.0414704</td>
+    <td align="center">-</td>
+  </tr>
+  <tr>
+    <td>3D, 4 global refinements</td>
+    <td>8.38E-005</td>
+    <td>8.0</td>
+    <td>0.00088494</td>
+    <td>4.1</td>
+    <td>0.0103781</td>
+    <td>4.0</td>
+  </tr>
+  <tr>
+    <td>3D, 5 global refinements</td>
+    <td>1.05E-005</td>
+    <td>8.0</td>
+    <td>0.000220253</td>
+    <td>4.0</td>
+    <td>0.00259519</td>
+    <td>4.0</td>
+</th>
+  </tr>
+</table>
+
+<h3> Timing Results </h3>
+
+Let us compare the direct solver approach using UMFPACK to the two
+methods in which we choose $\widetilde {A^{-1}}=A^{-1}$ and
+$\widetilde{S^{-1}}=S^{-1}$ by solving linear systems with $A,S$ using
+CG. The preconditioner for CG is then either ILU or GMG.
+The following table summarizes solver iterations, timings, and virtual
+memory (VM) peak usage:
+
+<table align="center" class="doxtable">
+<tr>
+  <th></th>
+  <th colspan="3">General</th>
+  <th colspan="6">GMG</th>
+  <th colspan="6">ILU</th>
+  <th colspan="3">UMFPACK</th>
+</tr>
+<tr>
+  <th></th>
+  <th></th>
+  <th colspan="2">Timings</th>
+  <th colspan="2">Timings</th>
+  <th colspan="3">Iterations</th>
+  <th></th>
+  <th colspan="2">Timings</th>
+  <th colspan="3">Iterations</th>
+  <th></th>
+  <th colspan="2">Timings</th>
+  <th></th>
+</tr>
+<tr>
+  <th>Cycle</th>
+  <th>DoFs</th>
+  <th>Setup</th>
+  <th>Assembly</th>
+  <th>Setup</th>
+  <th>Solve</th>
+  <th>Outer</th>
+  <th>Inner (A)</th>
+  <th>Inner (S)</th>
+  <th>VM Peak</th>
+  <th>Setup</th>
+  <th>Solve</th>
+  <th>Outer</th>
+  <th>Inner (A)</th>
+  <th>Inner (S)</th>
+  <th>VM Peak</th>
+  <th>Setup</th>
+  <th>Solve</th>
+  <th>VM Peak</th>
+</tr>
+<tr>
+  <td>0</td>
+  <td>15468</td>
+  <td>0.1s</td>
+  <td>0.3s</td>
+  <td>0.3s</td>
+  <td>1.3s</td>
+  <td>21</td>
+  <td>67</td>
+  <td>22</td>
+  <td>4805</td>
+  <td>0.3s</td>
+  <td>0.6s</td>
+  <td>21</td>
+  <td>180</td>
+  <td>22</td>
+  <td>4783</td>
+  <td>2.65s</td>
+  <td>2.8s</td>
+  <td>5054</td>
+</tr>
+<tr>
+  <td>1</td>
+  <td>112724</td>
+  <td>1.0s</td>
+  <td>2.4s</td>
+  <td>2.6s</td>
+  <td>14s</td>
+  <td>21</td>
+  <td>67</td>
+  <td>22</td>
+  <td>5441</td>
+  <td>2.8s</td>
+  <td>15.8s</td>
+  <td>21</td>
+  <td>320</td>
+  <td>22</td>
+  <td>5125</td>
+  <td>236s</td>
+  <td>237s</td>
+  <td>11288</td>
+</tr>
+<tr>
+  <td>2</td>
+  <td>859812</td>
+  <td>9.0s</td>
+  <td>20s</td>
+  <td>20s</td>
+  <td>101s</td>
+  <td>20</td>
+  <td>65</td>
+  <td>21</td>
+  <td>10641</td>
+  <td>27s</td>
+  <td>268s</td>
+  <td>21</td>
+  <td>592</td>
+  <td>22</td>
+  <td>8307</td>
+  <td>-</td>
+  <td>-</td>
+  <td>-</td>
+</tr>
+</table>
+
+As can be seen from the table:
+
+1. UMFPACK uses large amounts of memory, especially in 3d. Also, UMFPACK
+timings do not scale favorably with problem size.
+
+2. Because we are using inner solvers for $A$ and $S$, ILU and GMG require the
+same number of outer iterations.
+
+3. The number of (inner) iterations for $A$ increases for ILU with refinement, leading
+to worse than linear scaling in solve time. In contrast, the number of inner
+iterations for $A$ stays constant with GMG leading to nearly perfect scaling in
+solve time.
+
+4. GMG needs slightly more memory than ILU to store the level and interface
+matrices.
+
+<h3> Possible extensions </h3>
+
+<h4> Check higher order discretizations </h4>
+
+Experiment with higher order stable FE pairs and check that you observe the
+correct convergence rates.
+
+<h4> Compare with cheap preconditioner </h4>
+
+The introduction also outlined another option to precondition the
+overall system, namely one in which we do not choose $\widetilde
+{A^{-1}}=A^{-1}$ as in the table above, but in which
+$\widetilde{A^{-1}}$ is only a single preconditioner application with
+GMG or ILU, respectively.
+
+This is in fact implemented in the code: Currently, the boolean
+<code>use_expensive</code> in <code>solve()</code> is set to @p true. The
+option mentioned above is obtained by setting it to @p false.
+
+What you will find is that the number of FGMRES iterations stays
+constant under refinement if you use GMG this way. This means that the
+Multigrid is optimal and independent of $h$.
+

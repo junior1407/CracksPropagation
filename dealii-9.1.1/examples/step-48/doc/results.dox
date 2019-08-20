@@ -1,0 +1,242 @@
+<h1>Results</h1>
+
+<h3>Comparison with a sparse matrix</h3>
+
+In order to demonstrate the gain in using the MatrixFree class instead of
+the standard <code>deal.II</code> assembly routines for evaluating the
+information from old time steps, we study a simple serial run of the code on a
+nonadaptive mesh. Since much time is spent on evaluating the sine function, we
+do not only show the numbers of the full sine-Gordon equation but also for the
+wave equation (the sine-term skipped from the sine-Gordon equation). We use
+both second and fourth order elements. The results are summarized in the
+following table.
+
+<table align="center" class="doxtable">
+  <tr>
+    <th>&nbsp;</th>
+    <th colspan="3">wave equation</th>
+    <th colspan="2">sine-Gordon</th>
+  </tr>
+  <tr>
+    <th>&nbsp;</th>
+    <th>MF</th>
+    <th>SpMV</th>
+    <th>dealii</th>
+    <th>MF</th>
+    <th>dealii</th>
+  </tr>
+  <tr>
+    <td>2D, $\mathcal{Q}_2$</td>
+    <td align="right"> 0.0106</td>
+    <td align="right"> 0.00971</td>
+    <td align="right"> 0.109</td>
+    <td align="right"> 0.0243</td>
+    <td align="right"> 0.124</td>
+  </tr>
+  <tr>
+    <td>2D, $\mathcal{Q}_4$</td>
+    <td align="right"> 0.0328</td>
+    <td align="right"> 0.0706</td>
+    <td align="right"> 0.528</td>
+    <td align="right"> 0.0714</td>
+    <td align="right"> 0.502</td>
+   </tr>
+   <tr>
+    <td>3D, $\mathcal{Q}_2$</td>
+    <td align="right"> 0.0151</td>
+    <td align="right"> 0.0320</td>
+    <td align="right"> 0.331</td>
+    <td align="right"> 0.0376</td>
+    <td align="right"> 0.364</td>
+   </tr>
+   <tr>
+    <td>3D, $\mathcal{Q}_4$</td>
+    <td align="right"> 0.0918</td>
+    <td align="right"> 0.844</td>
+    <td align="right"> 6.83</td>
+    <td align="right"> 0.194</td>
+    <td align="right"> 6.95</td>
+   </tr>
+</table>
+
+It is apparent that the matrix-free code outperforms the standard assembly
+routines in deal.II by far. In 3D and for fourth order elements, one operator
+evaluation is also almost ten times as fast as a sparse matrix-vector
+product.
+
+<h3>Parallel run in 2D and 3D</h3>
+
+We start with the program output obtained on a workstation with 12 cores / 24
+threads (one Intel Xeon E5-2687W v4 CPU running at 3.2 GHz, hyperthreading
+enabled), running the program in release mode:
+@code
+\$ make run
+Number of MPI ranks:            1
+Number of threads on each rank: 24
+Vectorization over 4 doubles = 256 bits (AVX), VECTORIZATION_LEVEL=2
+
+   Number of global active cells: 15412
+   Number of degrees of freedom: 249065
+   Time step size: 0.00292997, finest cell: 0.117188
+
+   Time:     -10, solution norm:  9.5599
+   Time:   -9.41, solution norm:  17.678
+   Time:   -8.83, solution norm:  23.504
+   Time:   -8.24, solution norm:    27.5
+   Time:   -7.66, solution norm:  29.513
+   Time:   -7.07, solution norm:  29.364
+   Time:   -6.48, solution norm:   27.23
+   Time:    -5.9, solution norm:  23.527
+   Time:   -5.31, solution norm:  18.439
+   Time:   -4.73, solution norm:  11.935
+   Time:   -4.14, solution norm:  5.5284
+   Time:   -3.55, solution norm:  8.0354
+   Time:   -2.97, solution norm:  14.707
+   Time:   -2.38, solution norm:      20
+   Time:    -1.8, solution norm:  22.834
+   Time:   -1.21, solution norm:  22.771
+   Time:  -0.624, solution norm:  20.488
+   Time: -0.0381, solution norm:  16.697
+   Time:   0.548, solution norm:  11.221
+   Time:    1.13, solution norm:  5.3912
+   Time:    1.72, solution norm:  8.4528
+   Time:    2.31, solution norm:  14.335
+   Time:    2.89, solution norm:  18.555
+   Time:    3.48, solution norm:  20.894
+   Time:    4.06, solution norm:  21.305
+   Time:    4.65, solution norm:  19.903
+   Time:    5.24, solution norm:  16.864
+   Time:    5.82, solution norm:  12.223
+   Time:    6.41, solution norm:   6.758
+   Time:    6.99, solution norm:  7.2423
+   Time:    7.58, solution norm:  12.888
+   Time:    8.17, solution norm:  17.273
+   Time:    8.75, solution norm:  19.654
+   Time:    9.34, solution norm:  19.838
+   Time:    9.92, solution norm:  17.964
+   Time:      10, solution norm:  17.595
+
+   Performed 6826 time steps.
+   Average wallclock time per time step: 0.0013453s
+   Spent 14.976s on output and 9.1831s on computations.
+@endcode
+
+In 3D, the respective output looks like
+@code
+\$ make run
+Number of MPI ranks:            1
+Number of threads on each rank: 24
+Vectorization over 4 doubles = 256 bits (AVX), VECTORIZATION_LEVEL=2
+
+   Number of global active cells: 17592
+   Number of degrees of freedom: 1193881
+   Time step size: 0.0117233, finest cell: 0.46875
+
+   Time:     -10, solution norm:  29.558
+   Time:   -7.66, solution norm:  129.13
+   Time:   -5.31, solution norm:  67.753
+   Time:   -2.97, solution norm:  79.245
+   Time:  -0.621, solution norm:  123.52
+   Time:    1.72, solution norm:  43.525
+   Time:    4.07, solution norm:  93.285
+   Time:    6.41, solution norm:  97.722
+   Time:    8.76, solution norm:  36.734
+   Time:      10, solution norm:  94.115
+
+   Performed 1706 time steps.
+   Average wallclock time per time step: 0.0084542s
+   Spent 16.766s on output and 14.423s on computations.
+@endcode
+
+It takes 0.008 seconds for one time step with more than a million
+degrees of freedom (note that we would need many processors to reach such
+numbers when solving linear systems).
+
+If we replace the thread-parallelization by a pure MPI parallelization, the
+timings change into:
+@code
+\$ mpirun -n 24 ./step-48
+Number of MPI ranks:            24
+Number of threads on each rank: 1
+Vectorization over 4 doubles = 256 bits (AVX), VECTORIZATION_LEVEL=2
+...
+   Performed 1706 time steps.
+   Average wallclock time per time step: 0.0051747s
+   Spent 2.0535s on output and 8.828s on computations.
+@endcode
+
+We observe a dramatic speedup for the output (which makes sense, given that
+most code of the output is not parallelized via threads, whereas it is for
+MPI), but less than the theoretical factor of 12 we would expect from the
+parallelism. More interestingly, the computations also get faster when
+switching from the threads-only variant to the MPI-only variant. This is a
+general observation for the MatrixFree framework (as of updating this data in
+2019). The main reason is that the decisions regarding work on conflicting
+cell batches made to enable execution in parallel are overly pessimistic:
+While they ensure that no work on neighboring cells is done on different
+threads at the same time, this conservative setting implies that data from
+neighboring cells is also evicted from caches by the time neighbors get
+touched. Furthermore, the current scheme is not able to provide a constant
+load for all 24 threads for the given mesh with 17,592 cells.
+
+The current program allows to also mix MPI parallelization with thread
+parallelization. This is most beneficial when running programs on clusters
+with multiple nodes, using MPI for the inter-node parallelization and threads
+for the intra-node parallelization. On the workstation used above, we can run
+threads in the hyperthreading region (i.e., using 2 threads for each of the 12
+MPI ranks). An important setting for mixing MPI with threads is to ensure
+proper binning of tasks to CPUs. On many clusters the placing is either
+automatically via the `mpirun/mpiexec` environment, or there can be manual
+settings. Here, we simply report the run times the plain version of the
+program (noting that things could be improved towards the timings of the
+MPI-only program when proper pinning is done):
+@code
+\$ mpirun -n 12 ./step-48
+Number of MPI ranks:            12
+Number of threads on each rank: 2
+Vectorization over 4 doubles = 256 bits (AVX), VECTORIZATION_LEVEL=2
+...
+   Performed 1706 time steps.
+   Average wallclock time per time step: 0.0056651s
+   Spent 2.5175s on output and 9.6646s on computations.
+@endcode
+
+
+
+<h3>Possibilities for extensions</h3>
+
+There are several things in this program that could be improved to make it
+even more efficient (besides improved boundary conditions and physical
+stuff as discussed in step-25):
+
+<ul> <li> <b>Faster evaluation of sine terms:</b> As becomes obvious
+  from the comparison of the plain wave equation and the sine-Gordon
+  equation above, the evaluation of the sine terms dominates the total
+  time for the finite element operator application. There are a few
+  reasons for this: Firstly, the deal.II sine computation of a
+  VectorizedArray field is not vectorized (as opposed to the rest of
+  the operator application). This could be cured by handing the sine
+  computation to a library with vectorized sine computations like
+  Intel's math kernel library (MKL). By using the function
+  <code>vdSin</code> in MKL, the program uses half the computing time
+  in 2D and 40 percent less time in 3D. On the other hand, the sine
+  computation is structurally much more complicated than the simple
+  arithmetic operations like additions and multiplications in the rest
+  of the local operation.
+
+  <li> <b>Higher order time stepping:</b> While the implementation allows for
+  arbitrary order in the spatial part (by adjusting the degree of the finite
+  element), the time stepping scheme is a standard second-order leap-frog
+  scheme. Since solutions in wave propagation problems are usually very
+  smooth, the error is likely dominated by the time stepping part. Of course,
+  this could be cured by using smaller time steps (at a fixed spatial
+  resolution), but it would be more efficient to use higher order time
+  stepping as well. While it would be straight-forward to do so for a
+  first-order system (use some Runge&ndash;Kutta scheme of higher order,
+  probably combined with adaptive time step selection like the <a
+  href="http://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method">Dormand&ndash;Prince
+  method</a>), it is more challenging for the second-order formulation. At
+  least in the finite difference community, people usually use the PDE to find
+  spatial correction terms that improve the temporal error.
+
+</ul>

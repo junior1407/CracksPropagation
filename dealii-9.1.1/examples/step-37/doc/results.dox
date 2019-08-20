@@ -1,0 +1,678 @@
+<h1>Results</h1>
+
+<h3>Program output</h3>
+
+Since this example solves the same problem as step-5 (except for
+a different coefficient), there is little to say about the
+solution. We show a picture anyway, illustrating the size of the
+solution through both isocontours and volume rendering:
+
+<img src="https://www.dealii.org/images/steps/developer/step-37.solution.png" alt="">
+
+Of more interest is to evaluate some aspects of the multigrid solver.
+When we run this program in 2D for quadratic ($Q_2$) elements, we get the
+following output (when run on one core in release mode):
+@code
+Vectorization over 2 doubles = 128 bits (SSE2), VECTORIZATION_LEVEL=1
+Cycle 0
+Number of degrees of freedom: 81
+Total setup time               (wall) 0.00159788s
+Time solve (6 iterations)  (CPU/wall) 0.000951s/0.000951052s
+
+Cycle 1
+Number of degrees of freedom: 289
+Total setup time               (wall) 0.00114608s
+Time solve (6 iterations)  (CPU/wall) 0.000935s/0.000934839s
+
+Cycle 2
+Number of degrees of freedom: 1089
+Total setup time               (wall) 0.00244665s
+Time solve (6 iterations)  (CPU/wall) 0.00207s/0.002069s
+
+Cycle 3
+Number of degrees of freedom: 4225
+Total setup time               (wall) 0.00678205s
+Time solve (6 iterations)  (CPU/wall) 0.005616s/0.00561595s
+
+Cycle 4
+Number of degrees of freedom: 16641
+Total setup time               (wall) 0.0241671s
+Time solve (6 iterations)  (CPU/wall) 0.019543s/0.0195441s
+
+Cycle 5
+Number of degrees of freedom: 66049
+Total setup time               (wall) 0.0967851s
+Time solve (6 iterations)  (CPU/wall) 0.07457s/0.0745709s
+
+Cycle 6
+Number of degrees of freedom: 263169
+Total setup time               (wall) 0.346374s
+Time solve (6 iterations)  (CPU/wall) 0.260042s/0.265033s
+@endcode
+
+As in step-16, we see that the number of CG iterations remains constant with
+increasing number of degrees of freedom. A constant number of iterations
+(together with optimal computational properties) means that the computing time
+approximately quadruples as the problem size quadruples from one cycle to the
+next. The code is also very efficient in terms of storage. Around 2-4 million
+degrees of freedom fit into 1 GB of memory, see also the MPI results below. An
+interesting fact is that solving one linear system is cheaper than the setup,
+despite not building a matrix (approximately half of which is spent in the
+DoFHandler::distribute_dofs() and DoFHandler::distribute_mg_dofs()
+calls). This shows the high efficiency of this approach, but also that the
+deal.II data structures are quite expensive to set up and the setup cost must
+be amortized over several system solves.
+
+Not much changes if we run the program in three spatial dimensions. Since we
+use uniform mesh refinement, we get eight times as many elements and
+approximately eight times as many degrees of freedom with each cycle:
+
+@code
+Vectorization over 2 doubles = 128 bits (SSE2), VECTORIZATION_LEVEL=1
+Cycle 0
+Number of degrees of freedom: 125
+Total setup time               (wall) 0.00231099s
+Time solve (6 iterations)  (CPU/wall) 0.000692s/0.000922918s
+
+Cycle 1
+Number of degrees of freedom: 729
+Total setup time               (wall) 0.00289083s
+Time solve (6 iterations)  (CPU/wall) 0.001534s/0.0024128s
+
+Cycle 2
+Number of degrees of freedom: 4913
+Total setup time               (wall) 0.0143182s
+Time solve (6 iterations)  (CPU/wall) 0.010785s/0.0107841s
+
+Cycle 3
+Number of degrees of freedom: 35937
+Total setup time               (wall) 0.087064s
+Time solve (6 iterations)  (CPU/wall) 0.063522s/0.06545s
+
+Cycle 4
+Number of degrees of freedom: 274625
+Total setup time               (wall) 0.596306s
+Time solve (6 iterations)  (CPU/wall) 0.427757s/0.431765s
+
+Cycle 5
+Number of degrees of freedom: 2146689
+Total setup time               (wall) 4.96491s
+Time solve (6 iterations)  (CPU/wall) 3.53126s/3.56142s
+@endcode
+
+Since it is so easy, we look at what happens if we increase the polynomial
+degree. When selecting the degree as four in 3D, i.e., on $\mathcal Q_4$
+elements, by changing the line <code>const unsigned int
+degree_finite_element=4;</code> at the top of the program, we get the
+following program output:
+
+@code
+Vectorization over 2 doubles = 128 bits (SSE2), VECTORIZATION_LEVEL=1
+Cycle 0
+Number of degrees of freedom: 729
+Total setup time               (wall) 0.00633097s
+Time solve (6 iterations)  (CPU/wall) 0.002829s/0.00379395s
+
+Cycle 1
+Number of degrees of freedom: 4913
+Total setup time               (wall) 0.0174279s
+Time solve (6 iterations)  (CPU/wall) 0.012255s/0.012254s
+
+Cycle 2
+Number of degrees of freedom: 35937
+Total setup time               (wall) 0.082655s
+Time solve (6 iterations)  (CPU/wall) 0.052362s/0.0523629s
+
+Cycle 3
+Number of degrees of freedom: 274625
+Total setup time               (wall) 0.507943s
+Time solve (6 iterations)  (CPU/wall) 0.341811s/0.345788s
+
+Cycle 4
+Number of degrees of freedom: 2146689
+Total setup time               (wall) 3.46251s
+Time solve (7 iterations)  (CPU/wall) 3.29638s/3.3265s
+
+Cycle 5
+Number of degrees of freedom: 16974593
+Total setup time               (wall) 27.8989s
+Time solve (7 iterations)  (CPU/wall) 26.3705s/27.1077s
+@endcode
+
+Since $\mathcal Q_4$ elements on a certain mesh correspond to $\mathcal Q_2$
+elements on half the mesh size, we can compare the run time at cycle 4 with
+fourth degree polynomials with cycle 5 using quadratic polynomials, both at
+2.1 million degrees of freedom. The surprising effect is that the solver for
+$\mathcal Q_4$ element is actually slightly faster than for the quadratic
+case, despite using one more linear iteration. The effect that higher-degree
+polynomials are similarly fast or even faster than lower degree ones is one of
+the main strengths of matrix-free operator evaluation through sum
+factorization, see the <a
+href="http://dx.doi.org/10.1016/j.compfluid.2012.04.012">matrix-free
+paper</a>. This is fundamentally different to matrix-based methods that get
+more expensive per unknown as the polynomial degree increases and the coupling
+gets denser.
+
+In addition, also the setup gets a bit cheaper for higher order, which is
+because fewer elements need to be set up.
+
+Finally, let us look at the timings with degree 8, which corresponds to
+another round of mesh refinement in the lower order methods:
+
+@code
+Vectorization over 2 doubles = 128 bits (SSE2), VECTORIZATION_LEVEL=1
+Cycle 0
+Number of degrees of freedom: 4913
+Total setup time               (wall) 0.0842004s
+Time solve (8 iterations)  (CPU/wall) 0.019296s/0.0192959s
+
+Cycle 1
+Number of degrees of freedom: 35937
+Total setup time               (wall) 0.327048s
+Time solve (8 iterations)  (CPU/wall) 0.07517s/0.075999s
+
+Cycle 2
+Number of degrees of freedom: 274625
+Total setup time               (wall) 2.12335s
+Time solve (8 iterations)  (CPU/wall) 0.448739s/0.453698s
+
+Cycle 3
+Number of degrees of freedom: 2146689
+Total setup time               (wall) 16.1743s
+Time solve (8 iterations)  (CPU/wall) 3.95003s/3.97717s
+
+Cycle 4
+Number of degrees of freedom: 16974593
+Total setup time               (wall) 130.8s
+Time solve (8 iterations)  (CPU/wall) 31.0316s/31.767s
+@endcode
+
+Here, the initialization seems considerably slower than before, which is
+mainly due to the computation of the diagonal of the matrix, which actually
+computes a 729 x 729 matrix on each cell and throws away everything but the
+diagonal. The solver times, however, are again very close to the quartic case,
+showing that the linear increase with the polynomial degree that is
+theoretically expected is almost completely offset by better computational
+characteristics and the fact that higher order methods have a smaller share of
+degrees of freedom living on several cells that add to the evaluation
+complexity.
+
+<h3>Comparison with a sparse matrix</h3>
+
+In order to understand the capabilities of the matrix-free implementation, we
+compare the performance of the 3d example above with a sparse matrix
+implementation based on TrilinosWrappers::SparseMatrix by measuring both the
+computation times for the initialization of the problem (distribute DoFs,
+setup and assemble matrices, setup multigrid structures) and the actual
+solution for the matrix-free variant and the variant based on sparse
+matrices. We base the preconditioner on float numbers and the actual matrix
+and vectors on double numbers, as shown above. Tests are run on an Intel Core
+i7-5500U notebook processor (two cores and <a
+href="http://en.wikipedia.org/wiki/Advanced_Vector_Extensions">AVX</a>
+support, i.e., four operations on doubles can be done with one CPU
+instruction, which is heavily used in FEEvaluation), optimized mode, and two
+MPI ranks.
+
+<table align="center" class="doxtable">
+  <tr>
+    <th>&nbsp;</th>
+    <th colspan="2">Sparse matrix</th>
+    <th colspan="2">Matrix-free implementation</th>
+  </tr>
+  <tr>
+    <th>n_dofs</th>
+    <th>Setup + assemble</th>
+    <th>&nbsp;Solve&nbsp;</th>
+    <th>Setup + assemble</th>
+    <th>&nbsp;Solve&nbsp;</th>
+  </tr>
+  <tr>
+    <td align="right">125</td>
+    <td align="center">0.0042s</td>
+    <td align="center">0.0012s</td>
+    <td align="center">0.0022s</td>
+    <td align="center">0.00095s</td>
+  </tr>
+  <tr>
+    <td align="right">729</td>
+    <td align="center">0.012s</td>
+    <td align="center">0.0040s</td>
+    <td align="center">0.0027s</td>
+    <td align="center">0.0021s</td>
+  </tr>
+  <tr>
+    <td align="right">4,913</td>
+    <td align="center">0.082s</td>
+    <td align="center">0.012s</td>
+    <td align="center">0.011s</td>
+    <td align="center">0.0057s</td>
+  </tr>
+  <tr>
+    <td align="right">35,937</td>
+    <td align="center">0.73s</td>
+    <td align="center">0.13s</td>
+    <td align="center">0.048s</td>
+    <td align="center">0.040s</td>
+  </tr>
+  <tr>
+    <td align="right">274,625</td>
+    <td align="center">5.43s</td>
+    <td align="center">1.01s</td>
+    <td align="center">0.33s</td>
+    <td align="center">0.25s</td>
+  </tr>
+  <tr>
+    <td align="right">2,146,689</td>
+    <td align="center">43.8s</td>
+    <td align="center">8.24s</td>
+    <td align="center">2.42s</td>
+    <td align="center">2.06s</td>
+  </tr>
+</table>
+
+The table clearly shows that the matrix-free implementation is more than twice
+as fast for the solver, and more than six times as fast when it comes to
+initialization costs. As the problem size is made a factor 8 larger, we note
+that the times usually go up by a factor eight, too (as the solver iterations
+are constant at six). The main deviation is in the sparse matrix between 5k
+and 36k degrees of freedom, where the time increases by a factor 12. This is
+the threshold where the (L3) cache in the processor can no longer hold all
+data necessary for the matrix-vector products and all matrix elements must be
+fetched from main memory.
+
+Of course, this picture does not necessarily translate to all cases, as there
+are problems where knowledge of matrix entries enables much better solvers (as
+happens when the coefficient is varying more strongly than in the above
+example). Moreover, it also depends on the computer system. The present system
+has good memory performance, so sparse matrices perform comparably
+well. Nonetheless, the matrix-free implementation gives a nice speedup already
+for the <i>Q</i><sub>2</sub> elements used in this example. This becomes
+particularly apparent for time-dependent or nonlinear problems where sparse
+matrices would need to be reassembled over and over again, which becomes much
+easier with this class. And of course, thanks to the better complexity of the
+products, the method gains increasingly larger advantages when the order of the
+elements increases (the matrix-free implementation has costs
+4<i>d</i><sup>2</sup><i>p</i> per degree of freedom, compared to
+2<i>p<sup>d</sup></i> for the sparse matrix, so it will win anyway for order 4
+and higher in 3d).
+
+<h3> Results for large-scale parallel computations on SuperMUC</h3>
+
+As explained in the introduction and the in-code comments, this program can be
+run in parallel with MPI. It turns out that geometric multigrid schemes work
+really well and can scale to very large machines. To the authors' knowledge,
+the geometric multigrid results shown here are the largest computations done
+with deal.II as of late 2016, run on up to 147,456 cores of the <a
+href="https://www.lrz.de/services/compute/supermuc/systemdescription/">complete
+SuperMUC Phase 1</a>. The ingredients for scalability beyond 1000 cores are
+that no data structure that depends on the global problem size is held in its
+entirety on a single processor and that the communication is not too frequent
+in order not to run into latency issues of the network.  For PDEs solved with
+iterative solvers, the communication latency is often the limiting factor,
+rather than the throughput of the network. For the example of the SuperMUC
+system, the point-to-point latency between two processors is between 1e-6 and
+1e-5 seconds, depending on the proximity in the MPI network. The matrix-vector
+products with @p LaplaceOperator from this class involves several
+point-to-point communication steps, interleaved with computations on each
+core. The resulting latency of a matrix-vector product is around 1e-4
+seconds. Global communication, for example an @p MPI_Allreduce operation that
+accumulates the sum of a single number per rank over all ranks in the MPI
+network, has a latency of 1e-4 seconds. The multigrid V-cycle used in this
+program is also a form of global communication. Think about the coarse grid
+solve that happens on a single processor: It accumulates the contributions
+from all processors before it starts. When completed, the coarse grid solution
+is transferred to finer levels, where more and more processors help in
+smoothing until the fine grid. Essentially, this is a tree-like pattern over
+the processors in the network and controlled by the mesh. As opposed to the
+@p MPI_Allreduce operations where the tree in the reduction is optimized to the
+actual links in the MPI network, the multigrid V-cycle does this according to
+the partitioning of the mesh. Thus, we cannot expect the same
+optimality. Furthermore, the multigrid cycle is not simply a walk up and down
+the refinement tree, but also communication on each level when doing the
+smoothing. In other words, the global communication in multigrid is more
+challenging and related to the mesh that provides less optimization
+opportunities. The measured latency of the V-cycle is between 6e-3 and 2e-2
+seconds, i.e., the same as 60 to 200 MPI_Allreduce operations.
+
+The following figure shows a scaling experiments on $\mathcal Q_3$
+elements. Along the lines, the problem size is held constant as the number of
+cores is increasing. When doubling the number of cores, one expects a halving
+of the computational time, indicated by the dotted gray lines. The results
+show that the implementation shows almost ideal behavior until an absolute
+time of around 0.1 seconds is reached. The solver tolerances have been set
+such that the solver performs five iterations. This way of plotting data is
+the <b>strong scaling</b> of the algorithm. As we go to very large core
+counts, the curves flatten out a bit earlier, which is because of the
+communication network in SuperMUC where communication between processors
+farther away is slightly slower.
+
+<img src="https://www.dealii.org/images/steps/developer/step-37.scaling_strong.png" alt="">
+
+In addition, the plot also contains results for <b>weak scaling</b> that lists
+how the algorithm behaves as both the number of processor cores and elements
+is increased at the same pace. In this situation, we expect that the compute
+time remains constant. Algorithmically, the number of CG iterations is
+constant at 5, so we are good from that end. The lines in the plot are
+arranged such that the top left point in each data series represents the same
+size per processor, namely 131,072 elements (or approximately 3.5 million
+degrees of freedom per core). The gray lines indicating ideal strong scaling
+are by the same factor of 8 apart. The results show again that the scaling is
+almost ideal. The parallel efficiency when going from 288 cores to 147,456
+cores is at around 75% for a local problem size of 750,000 degrees of freedom
+per core which takes 1.0s on 288 cores, 1.03s on 2304 cores, 1.19s on 18k
+cores, and 1.35s on 147k cores. The algorithms also reach a very high
+utilization of the processor. The largest computation on 147k cores reaches
+around 1.7 PFLOPs/s on SuperMUC out of an arithmetic peak of 3.2 PFLOPs/s. For
+an iterative PDE solver, this is a very high number and significantly more is
+often only reached for dense linear algebra. Sparse linear algebra is limited
+to a tenth of this value.
+
+As mentioned in the introduction, the matrix-free method reduces the memory
+consumption of the data structures. Besides the higher performance due to less
+memory transfer, the algorithms also allow for very large problems to fit into
+memory. The figure below shows the computational time as we increase the
+problem size until an upper limit where the computation exhausts memory. We do
+this for 1k cores, 8k cores, and 65k cores and see that the problem size can
+be varied over almost two orders of magnitude with ideal scaling. The largest
+computation shown in this picture involves 292 billion ($2.92 \cdot 10^{11}$)
+degrees of freedom. On a DG computation of 147k cores, the above algorithms
+were also run involving up to 549 billion (2^39) DoFs.
+
+<img src="https://www.dealii.org/images/steps/developer/step-37.scaling_size.png" alt="">
+
+Finally, we note that while performing the tests on the large-scale system
+shown above, improvements of the multigrid algorithms in deal.II have been
+developed. The original version contained the sub-optimal code based on
+MGSmootherPrecondition where some MPI_Allreduce commands (checking whether
+all vector entries are zero) were done on each smoothing
+operation on each level, which only became apparent on 65k cores and
+more. However, the following picture shows that the improvement already pay
+off on a smaller scale, here shown on computations on up to 14,336 cores for
+$\mathcal Q_5$ elements:
+
+<img src="https://www.dealii.org/images/steps/developer/step-37.scaling_oldnew.png" alt="">
+
+
+<h3> Adaptivity</h3>
+
+As explained in the code, the algorithm presented here is prepared to run on
+adaptively refined meshes. If only part of the mesh is refined, the multigrid
+cycle will run with local smoothing and impose Dirichlet conditions along the
+interfaces which differ in refinement level for smoothing through the
+MatrixFreeOperators::Base class. Due to the way the degrees of freedom are
+distributed over levels, relating the owner of the level cells to the owner of
+the first descendant active cell, there can be an imbalance between different
+processors in MPI, which limits scalability by a factor of around two to five.
+
+<h3> Possibilities for extensions</h3>
+
+<h4> Kelly error estimator </h4>
+
+As mentioned above the code is ready for locally adaptive h-refinement.
+For the Poisson equation one can employ the Kelly error indicator,
+implemented in the KellyErrorEstimator class. However one needs to be careful
+with the ghost indices of parallel vectors.
+In order to evaluate the jump terms in the error indicator, each MPI process
+needs to know locally relevant DoFs.
+However MatrixFree::initialize_dof_vector() function initializes the vector only with
+some locally relevant DoFs.
+The ghost indices made available in the vector are a tight set of only those indices
+that are touched in the cell integrals (including constraint resolution).
+This choice has performance reasons, because sending all locally relevant degrees
+of freedom would be too expensive compared to the matrix-vector product.
+Consequently the solution vector as-is is
+not suitable for the KellyErrorEstimator class.
+The trick is to change the ghost part of the partition, for example using a
+temporary vector and LinearAlgebra::distributed::Vector::copy_locally_owned_data_from()
+as shown below.
+
+@code
+IndexSet locally_relevant_dofs;
+DoFTools::extract_locally_relevant_dofs(dof_handler, locally_relevant_dofs);
+LinearAlgebra::distributed::Vector<double> copy_vec(solution);
+solution.reinit(dof_handler.locally_owned_dofs(),
+                locally_relevant_dofs,
+                triangulation.get_communicator());
+solution.copy_locally_owned_data_from(copy_vec);
+constraints.distribute(solution);
+solution.update_ghost_values();
+@endcode
+
+<h4> Shared-memory parallelization</h4>
+
+This program is parallelized with MPI only. As an alternative, the MatrixFree
+loop can also be issued in hybrid mode, for example by using MPI parallelizing
+over the nodes of a cluster and with threads through Intel TBB within the
+shared memory region of one node. To use this, one would need to both set the
+number of threads in the MPI_InitFinalize data structure in the main function,
+and set the MatrixFree::AdditionalData::tasks_parallel_scheme to
+partition_color to actually do the loop in parallel. This use case is
+discussed in step-48.
+
+<h4> Inhomogeneous Dirichlet boundary conditions </h4>
+
+The presented program assumes homogeneous Dirichlet boundary conditions. When
+going to non-homogeneous conditions, the situation is a bit more intricate. To
+understand how to implement such a setting, let us first recall how these
+arise in the mathematical formulation and how they are implemented in a
+matrix-based variant. In essence, an inhomogeneous Dirichlet condition sets
+some of the nodal values in the solution to given values rather than
+determining them through the variational principles,
+@f{eqnarray*}
+u_h(\mathbf{x}) = \sum_{i\in \mathcal N} \varphi_i(\mathbf{x}) u_i =
+\sum_{i\in \mathcal N \setminus \mathcal N_D} \varphi_i(\mathbf{x}) u_i +
+\sum_{i\in \mathcal N_D} \varphi_i(\mathbf{x}) g_i,
+@f}
+where $u_i$ denotes the nodal values of the solution and $\mathcal N$ denotes
+the set of all nodes. The set $\mathcal N_D\subset \mathcal N$ is the subset
+of the nodes that are subject to Dirichlet boundary conditions where the
+solution is forced to equal $u_i = g_i = g(\mathbf{x}_i)$ as the interpolation
+of boundary values on the Dirichlet-constrained node points $i\in \mathcal
+N_D$. We then insert this solution
+representation into the weak form, e.g. the Laplacian shown above, and move
+the known quantities to the right hand side:
+@f{eqnarray*}
+(\nabla \varphi_i, \nabla u_h)_\Omega &=& (\varphi_i, f)_\Omega \quad \Rightarrow \\
+\sum_{j\in \mathcal N \setminus \mathcal N_D}(\nabla \varphi_i,\nabla \varphi_j)_\Omega \, u_j &=&
+(\varphi_i, f)_\Omega
+-\sum_{j\in \mathcal N_D} (\nabla \varphi_i,\nabla\varphi_j)_\Omega\, g_j.
+@f}
+In this formula, the equations are tested for all basis functions $\varphi_i$
+with $i\in N \setminus \mathcal N_D$ that are not related to the nodes
+constrained by Dirichlet conditions.
+
+In the implementation in deal.II, the integrals $(\nabla \varphi_i,\nabla \varphi_j)_\Omega$
+on the right hand side are already contained in the local matrix contributions
+we assemble on each cell. When using
+AffineConstraints::distribute_local_to_global() as first described in the
+step-6 and step-7 tutorial programs, we can account for the contribution of
+inhomogeneous constraints <i>j</i> by multiplying the columns <i>j</i> and
+rows <i>i</i> of the local matrix according to the integrals $(\varphi_i,
+\varphi_j)_\Omega$ by the inhomogeneities and subtracting the resulting from
+the position <i>i</i> in the global right-hand-side vector, see also the @ref
+constraints module. In essence, we use some of the integrals that get
+eliminated from the left hand side of the equation to finalize the right hand
+side contribution. Similar mathematics are also involved when first writing
+all entries into a left hand side matrix and then eliminating matrix rows and
+columns by MatrixTools::apply_boundary_values().
+
+In principle, the components that belong to the constrained degrees of freedom
+could be eliminated from the linear system because they do not carry any
+information. In practice, in deal.II we always keep the size of the linear
+system the same to avoid handling two different numbering systems and avoid
+confusion about the two different index sets. In order to ensure that the
+linear system does not get singular when not adding anything to constrained
+rows, we then add dummy entries to the matrix diagonal that are otherwise
+unrelated to the real entries.
+
+In a matrix-free method, we need to take a different approach, since the @p
+LaplaceOperator class represents the matrix-vector product of a
+<b>homogeneous</b> operator (the left-hand side of the last formula).  It does
+not matter whether the AffineConstraints object passed to the
+MatrixFree::reinit() contains inhomogeneous constraints or not, the
+MatrixFree::cell_loop() call will only resolve the homogeneous part of the
+constraints as long as it represents a <b>linear</b> operator.
+
+In our matrix-free code, the right hand side computation where the
+contribution of inhomogeneous conditions ends up is completely decoupled from
+the matrix operator and handled by a different function above. Thus, we need
+to explicitly generate the data that enters the right hand side rather than
+using a byproduct of the matrix assembly. Since we already know how to apply
+the operator on a vector, we could try to use those facilities for a vector
+where we only set the Dirichlet values:
+@code
+  // interpolate boundary values on vector solution
+  std::map<types::global_dof_index, double> boundary_values;
+  VectorTools::interpolate_boundary_values(mapping,
+                                           dof_handler,
+                                           0,
+                                           BoundaryValueFunction<dim>(),
+                                           boundary_values);
+  for (const std::pair<const types::global_dof_index, double> &pair : boundary_values)
+    if (solution.locally_owned_elements().is_element(pair.first))
+      solution(pair.first) = pair.second;
+@endcode
+or, equivalently, if we already had filled the inhomogeneous constraints into
+an AffineConstraints object,
+@code
+  solution = 0;
+  constraints.distribute(solution);
+@endcode
+
+We could then pass the vector @p solution to the @p
+LaplaceOperator::vmult_add() function and add the new contribution to the @p
+system_rhs vector that gets filled in the @p LaplaceProblem::assemble_rhs()
+function. However, this idea does not work because the
+FEEvaluation::read_dof_values() call used inside the vmult() functions assumes
+homogeneous values on all constraints (otherwise the operator would not be a
+linear operator but an affine one). To also retrieve the values of the
+inhomogeneities, we could select one of two following strategies.
+
+<h5> Use FEEvaluation::read_dof_values_plain() to avoid resolving constraints </h5>
+
+The class FEEvaluation has a facility that addresses precisely this
+requirement: For non-homogeneous Dirichlet values, we do want to skip the
+implicit imposition of homogeneous (Dirichlet) constraints upon reading the
+data from the vector @p solution. For example, we could extend the @p
+LaplaceProblem::assemble_rhs() function to deal with inhomogeneous Dirichlet
+values as follows, assuming the Dirichlet values have been interpolated into
+the object @p constraints:
+@code
+template <int dim>
+void LaplaceProblem<dim>::assemble_rhs()
+{
+  solution = 0;
+  constraints.distribute(solution);
+  solution.update_ghost_values();
+  system_rhs = 0;
+
+  const Table<2, VectorizedArray<double>> &coefficient = system_matrix.get_coefficient();
+  FEEvaluation<dim, degree_finite_element> phi(*system_matrix.get_matrix_free());
+  for (unsigned int cell = 0;
+       cell < system_matrix.get_matrix_free()->n_macro_cells();
+       ++cell)
+    {
+      phi.reinit(cell);
+      phi.read_dof_values_plain(solution);
+      phi.evaluate(false, true);
+      for (unsigned int q = 0; q < phi.n_q_points; ++q)
+        {
+          phi.submit_gradient(-coefficient(cell, q) * phi.get_gradient(q), q);
+          phi.submit_value(make_vectorized_array<double>(1.0), q);
+        }
+      phi.integrate(true, true);
+      phi.distribute_local_to_global(system_rhs);
+    }
+  system_rhs.compress(VectorOperation::add);
+}
+@endcode
+
+In this code, we replaced the FEEvaluation::read_dof_values() function for the
+tentative solution vector by FEEvaluation::read_dof_values_plain() that
+ignores all constraints. Due to this setup, we must make sure that other
+constraints, e.g. by hanging nodes, are correctly distributed to the input
+vector already as they are not resolved as in
+FEEvaluation::read_dof_values_plain(). Inside the loop, we then evaluate the
+Laplacian and repeat the second derivative call with
+FEEvaluation::submit_gradient() from the @p LaplaceOperator class, but with the
+sign switched since we wanted to subtract the contribution of Dirichlet
+conditions on the right hand side vector according to the formula above. When
+we invoke the FEEvaluation::integrate() call, we then set both arguments
+regarding the value slot and first derivative slot to true to account for both
+terms added in the loop over quadrature points. Once the right hand side is
+assembled, we then go on to solving the linear system for the homogeneous
+problem, say involving a variable @p solution_update. After solving, we can
+add @p solution_update to the @p solution vector that contains the final
+(inhomogeneous) solution.
+
+Note that the negative sign for the Laplacian alongside with a positive sign
+for the forcing that we needed to build the right hand side is a more general
+concept: We have implemented nothing else than Newton's method for nonlinear
+equations, but applied to a linear system. We have used an initial guess for
+the variable @p solution in terms of the Dirichlet boundary conditions and
+computed a residual $r = f - Au_0$. The linear system was then solved as
+$\Delta u = A^{-1} (f-Au)$ and we finally computed $u = u_0 + \Delta u$. For a
+linear system, we obviously reach the exact solution after a single
+iteration. If we wanted to extend the code to a nonlinear problem, we would
+rename the @p assemble_rhs() function into a more descriptive name like @p
+assemble_residual() that computes the (weak) form of the residual, whereas the
+@p LaplaceOperator::apply_add() function would get the linearization of the
+residual with respect to the solution variable.
+
+<h5> Use LaplaceOperator with a second AffineConstraints object without Dirichlet conditions </h5>
+
+A second alternative to get the right hand side that re-uses the @p
+LaplaceOperator::apply_add() function is to instead add a second LaplaceOperator
+that skips Dirichlet constraints. To do this, we initialize a second MatrixFree
+object which does not have any boundary value constraints. This @p matrix_free
+object is then passed to a @p LaplaceOperator class instance @p
+inhomogeneous_operator that is only used to create the right hand side:
+@code
+template <int dim>
+void LaplaceProblem<dim>::assemble_rhs()
+{
+  system_rhs = 0;
+  AffineConstraints<double> no_constraints;
+  no_constraints.close();
+  LaplaceOperator<dim, degree_finite_element, double> inhomogeneous_operator;
+
+  typename MatrixFree<dim, double>::AdditionalData additional_data;
+  additional_data.mapping_update_flags =
+    (update_gradients | update_JxW_values | update_quadrature_points);
+  std::shared_ptr<MatrixFree<dim, double>> matrix_free(
+    new MatrixFree<dim, double>());
+  matrix_free->reinit(dof_handler,
+                      no_constraints,
+                      QGauss<1>(fe.degree + 1),
+                      additional_data);
+  inhomogeneous_operator.initialize(matrix_free);
+
+  solution = 0.0;
+  constraints.distribute(solution);
+  inhomogeneous_operator.evaluate_coefficient(Coefficient<dim>());
+  inhomogeneous_operator.vmult(system_rhs, solution);
+  system_rhs *= -1.0;
+
+  FEEvaluation<dim, degree_finite_element> phi(
+    *inhomogeneous_operator.get_matrix_free());
+  for (unsigned int cell = 0;
+       cell < inhomogeneous_operator.get_matrix_free()->n_macro_cells();
+       ++cell)
+    {
+      phi.reinit(cell);
+      for (unsigned int q = 0; q < phi.n_q_points; ++q)
+        phi.submit_value(make_vectorized_array<double>(1.0), q);
+      phi.integrate(true, false);
+      phi.distribute_local_to_global(system_rhs);
+    }
+  system_rhs.compress(VectorOperation::add);
+}
+@endcode
+
+A more sophisticated implementation of this technique could reuse the original
+MatrixFree object. This can be done by initializing the MatrixFree object with
+multiple blocks, where each block corresponds to a different AffineConstraints
+object. Doing this would require making substantial modifications to the
+LaplaceOperator class, but the MatrixFreeOperators::LaplaceOperator class that
+comes with the library can do this. See the discussion on blocks in
+MatrixFreeOperators::Base for more information on how to set up blocks.

@@ -1,0 +1,330 @@
+<h1>Results</h1>
+
+The program produces a series of <code>.eps</code> files of the
+triangulations. The methods are discussed above.
+
+
+<h3>Next steps: Curved Cells</h3>
+
+As mentioned in the introduction, creating a coarse mesh using the methods
+discussed here is only the first step. In order to refine a mesh, the
+Triangulation needs to know where to put new vertices on the mid-points of
+edges, faces, and cells. By default, these new points will be placed at the
+arithmetic mean of the surrounding points, but this isn't what you want if you
+need curved boundaries that aren't already adequately resolved by the coarse
+mesh. Several of the meshes shown in the introduction section fall into this
+category. For example, for this mesh the central hole is supposed to be round:
+
+<img src="https://www.dealii.org/images/steps/developer/step-49.grid-2a.png" alt="" height="200px">
+
+If you simply refine it, the Triangulation class can not know whether you wanted
+the hole to be round or to be an octagon. The default is to place new points
+along existing straight lines. After two mesh refinement steps, this would yield
+the following mesh, which is not what we wanted:
+
+<img src="https://www.dealii.org/images/steps/developer/step-49.grid-2d-refined.png" alt="" height="200px">
+
+What needs to happen is that you tell the triangulation that you in fact want
+to use a curved geometry. The way to do this requires three steps:
+- Create an object that describes the desired geometry. This object will be
+  queried when refining the Triangulation for new point placement. It will also
+  be used to calculate shape function values if a high degree mapping, like
+  MappingQ or MappingQGeneric, is used during system assembly.
+  In deal.II the Manifold class and classes inheriting from it (e.g.,
+  PolarManifold and FlatManifold) perform these calculations.
+- Notify the Triangulation object which Manifold classes to use. By default, a
+  Triangulation uses FlatManifold to do all geometric calculations,
+  which assumes that all cell edges are straight lines and all quadrilaterals
+  are flat. You can attach Manifold classes to a Triangulation by calling
+  Triangulation::set_manifold function, which associates a
+  <code>manifold_id</code> with a Manifold object. For more information on this
+  see the @ref GlossManifoldIndicator "glossary entry on this topic".
+- Finally, you must mark cells and cell faces with the correct
+  <code>manifold_id</code>. For example, you could get an annular sector with
+  curved cells in Cartesian coordinates (but rectangles in polar coordinates)
+  by doing the following:
+  @code
+  Triangulation<2> tria;
+  GridGenerator::hyper_cube(tria);
+  const auto cell = tria.begin_active();
+  cell->vertex(2) = Point<2>(-0.5, 1.0);
+  cell->vertex(3) = Point<2>(1.5, 1.0);
+  tria.set_all_manifold_ids(42);
+  tria.set_manifold(42, PolarManifold<2>(Point<2>(0.5, -1.0)));
+  tria.refine_global(3);
+  @endcode
+  Now, when the grid is refined, all cell splitting calculations will be done in
+  polar coordinates.
+
+To illustrate this process in more detail, let us consider an example created
+by Yuhan Zhou as part of a 2013 semester project at Texas A&amp;M University.
+The goal was to generate (and use) a geometry that describes a
+microstructured electric device. In a CAD program, the geometry looks like
+this:
+
+<img src="https://www.dealii.org/images/steps/developer/step-49.yuhan.1.png" alt="">
+
+In the following, we will walk you through the entire process of creating a
+mesh for this geometry, including a number of common pitfalls by showing the
+things that can go wrong.
+
+The first step in getting there was to create a coarse mesh, which was done by
+creating a 2d coarse mesh for each of cross sections, extruding them into the
+third direction, and gluing them together. The following code does this, using
+the techniques previously described:
+
+@code
+// Given a list of points and how vertices connect to cells, create a
+// mesh. This is in the same way as we do in step 14.
+void create_2d_grid(
+  const std::vector<Point<2>> &vertices,
+  const std::vector<
+    std::array<unsigned int, GeometryInfo<2>::vertices_per_cell>>
+    &               vertex_indices,
+  Triangulation<2> &coarse_grid)
+{
+  std::vector<CellData<2>> cells(vertex_indices.size());
+  for (unsigned int i = 0; i < cells.size(); ++i)
+    {
+      for (unsigned int j = 0; j < GeometryInfo<2>::vertices_per_cell; ++j)
+        cells[i].vertices[j] = vertex_indices[i][j];
+    }
+
+  coarse_grid.create_triangulation(vertices, cells, SubCellData());
+}
+
+
+// Create a triangulation that covers the entire volume
+void create_3d_grid(Triangulation<3> &triangulation)
+{
+  // Generate first cross section
+  const std::vector<Point<2>> vertices_1{{-1.5, 0.},
+                                         {-0.5, 0.},
+                                         {0.5, 0.},
+                                         {1.5, 0.},
+
+                                         {-1.5, 1.5},
+                                         {-0.5, 1.5},
+                                         {0.5, 1.5},
+                                         {1.5, 1.5},
+
+                                         {-1.5, 3.},
+                                         {-0.5, 3.},
+                                         {0.5, 3.},
+                                         {1.5, 3.},
+
+                                         {-0.5, 3 + 0.5 * sqrt(3)},
+                                         {0.5, 3 + 0.5 * sqrt(3)},
+
+                                         {-0.75, 3 + 0.75 * sqrt(3)},
+                                         {0.75, 3 + 0.75 * sqrt(3)}};
+
+  const std::vector<std::array<unsigned int, GeometryInfo<2>::vertices_per_cell>>
+    cell_vertices_1 = {{{0, 1, 4, 5}},
+                       {{1, 2, 5, 6}},
+                       {{3, 7, 2, 6}},
+                       {{4, 5, 8, 9}},
+                       {{5, 6, 9, 10}},
+                       {{7, 11, 6, 10}},
+                       {{8, 9, 14, 12}},
+                       {{9, 10, 12, 13}},
+                       {{11, 15, 10, 13}},
+                       {{14, 12, 15, 13}}};
+
+  // Copy vertices into a 2d triangulation
+  Triangulation<2> triangulation_2d_1;
+  create_2d_grid(vertices_1, cell_vertices_1, triangulation_2d_1);
+
+  // Then extrude it into a 3d piece
+  Triangulation<3> triangulation_3d_1;
+  GridGenerator::extrude_triangulation(triangulation_2d_1,
+                                       5,
+                                       2.5,
+                                       triangulation_3d_1);
+
+  // Now do the same with the second volume
+  const std::vector<Point<2>> vertices_2{{-2.5, 0.},
+                                         {-1.5, 0.},
+                                         {-0.5, 0.},
+                                         {0.5, 0.},
+                                         {1.5, 0.},
+                                         {2.5, 0.},
+
+                                         {-2.5, 1.5},
+                                         {-1.5, 1.5},
+                                         {-0.5, 1.5},
+                                         {0.5, 1.5},
+                                         {1.5, 1.5},
+                                         {2.5, 1.5},
+
+                                         {-2.5, 3.},
+                                         {-1.5, 3.},
+                                         {-0.5, 3.},
+                                         {0.5, 3.},
+                                         {1.5, 3.},
+                                         {2.5, 3.},
+
+                                         {-0.5, 3. + 0.5 * sqrt(3)},
+                                         {0.5, 3. + 0.5 * sqrt(3)},
+
+                                         {-0.75, 3. + 0.75 * sqrt(3)},
+                                         {0.75, 3. + 0.75 * sqrt(3)},
+
+                                         {-1.25, 3. + 1.25 * sqrt(3)},
+                                         {1.25, 3. + 1.25 * sqrt(3)}};
+
+  const std::vector<std::array<unsigned int, GeometryInfo<2>::vertices_per_cell>>
+    cell_vertices_2 = {{{0, 1, 6, 7}},
+                       {{1, 2, 7, 8}},
+                       {{2, 3, 8, 9}},
+                       {{4, 10, 3, 9}},
+                       {{5, 11, 4, 10}},
+                       {{6, 7, 12, 13}},
+                       {{7, 8, 13, 14}},
+                       {{8, 9, 14, 15}},
+                       {{10, 16, 9, 15}},
+                       {{11, 17, 10, 16}},
+                       {{12, 13, 22, 20}},
+                       {{13, 14, 20, 18}},
+                       {{14, 15, 18, 19}},
+                       {{16, 21, 15, 19}},
+                       {{17, 23, 16, 21}},
+                       {{20, 18, 21, 19}},
+                       {{22, 20, 23, 21}}};
+
+  Triangulation<2> triangulation_2d_2;
+  create_2d_grid(vertices_2, cell_vertices_2, triangulation_2d_2);
+
+  Triangulation<3> triangulation_3d_2;
+  GridGenerator::extrude_triangulation(triangulation_2d_2,
+                                       5,
+                                       2.5,
+                                       triangulation_3d_2);
+
+  // Also shift this triangulation in the z-direction so that it matches the
+  // end face of the first part
+  GridTools::shift(Point<3>(0, 0, 2.5), triangulation_3d_2);
+
+  // Now first merge these two pieces, then shift the first piece in
+  // z-direction beyond the second, and merge the shifted piece with the two
+  // previously merged one into the final one:
+  Triangulation<3> triangulation_3d_tmp;
+  GridGenerator::merge_triangulations(triangulation_3d_1,
+                                      triangulation_3d_2,
+                                      triangulation_3d_tmp);
+
+  GridTools::shift(Point<3>(0, 0, 5), triangulation_3d_1);
+
+  GridGenerator::merge_triangulations(triangulation_3d_tmp,
+                                      triangulation_3d_1,
+                                      triangulation);
+}
+@endcode
+
+This creates the following mesh:
+
+<img src="https://www.dealii.org/images/steps/developer/step-49.yuhan.8.png"
+     alt="" width="400" height="355">
+
+This mesh has the right general shape, but the top cells are now polygonal: their
+edges are no longer along circles and we do not have a very accurate
+representation of the original geometry. The next step is to teach the top part
+of the domain that it should be curved. Put another way, all calculations done
+on the top boundary cells should be done in cylindrical coordinates rather than
+Cartesian coordinates. We can do this by creating a CylindricalManifold object
+and associating it with the cells above $y = 3$. This way, when we refine the
+cells on top, we will place new points along concentric circles instead of
+straight lines.
+
+In deal.II we describe all geometries with classes that inherit from
+Manifold. The default geometry is Cartesian and is implemented in the
+FlatManifold class. As the name suggests, Manifold and its inheriting classes
+provide a way to describe curves and curved cells in a general way with ideas
+and terminology from differential geometry: for example, CylindricalManifold
+inherits from ChartManifold, which describes a geometry through pull backs
+and push forwards. In general, one should think that the Triangulation class
+describes the topology of a domain (in addition, of course, to storing the
+locations of the vertices) while the Manifold classes describe the geometry of a
+domain (e.g., whether or not a pair of vertices lie along a circular arc or a
+straight line). A Triangulation will refine cells by doing computations with the
+Manifold associated with that cell regardless of whether or not the cell is on
+the boundary. Put another way: the Manifold classes do not need any information
+about where the boundary of the Triangulation actually is: it is up to the
+Triangulation to query the right Manifold for calculations on a cell. Most
+Manifold functions (e.g., Manifold::get_intermediate_point) know nothing about
+the domain itself and just assume that the points given to it lie along a
+geodesic. In this case, with the CylindricalManifold constructed below, the
+geodesics are arcs along circles orthogonal to the $z$-axis centered along the
+line $(0, 3, z)$.
+
+Since all three top parts of the domain use the same geodesics, we will
+mark all cells with centers above the $y = 3$ line as being cylindrical in
+nature:
+
+@code
+const Tensor<1, 3>           axis({0.0, 0.0, 1.0});
+const Point<3>               axial_point(0, 3.0, 0.0);
+const CylindricalManifold<3> cylinder(axis, axial_point);
+const types::manifold_id     cylinder_id = 8;
+
+Triangulation<3> triangulation;
+create_3d_grid(triangulation);
+triangulation.set_manifold(cylinder_id, cylinder);
+
+for (auto &cell : triangulation.active_cell_iterators())
+  if (cell->center()[1] >= 3.0)
+    cell->set_all_manifold_ids(cylinder_id);
+
+triangulation.refine_global(1);
+@endcode
+
+With this code, we get a mesh that looks like this:
+
+<img src="https://www.dealii.org/images/steps/developer/step-49.yuhan.9.png"
+     alt="" width="400" height="355">
+
+This change fixes the boundary but creates a new problem: the cells adjacent to
+the cylinder's axis are badly distorted. We should use Cartesian coordinates for
+calculations on these central cells to avoid this issue. The cells along the
+center line all have a face that touches the line $(0, 3, z)$ so, to implement
+this, we go back and overwrite the <code>manifold_id</code>s on these cells to
+be zero (which is the default):
+
+@code
+const Tensor<1, 3>           axis({0.0, 0.0, 1.0});
+const Point<3>               axial_point(0, 3.0, 0.0);
+const CylindricalManifold<3> cylinder(axis, axial_point);
+const types::manifold_id     cylinder_id = 8;
+
+Triangulation<3> triangulation;
+create_3d_grid(triangulation);
+triangulation.set_manifold(cylinder_id, cylinder);
+
+for (auto &cell : triangulation.active_cell_iterators())
+  if (cell->center()[1] >= 3.0)
+    cell->set_all_manifold_ids(cylinder_id);
+
+for (auto &cell : triangulation.active_cell_iterators())
+  for (unsigned int face_n = 0; face_n < GeometryInfo<3>::faces_per_cell;
+       ++face_n)
+    {
+      const Point<3> face_center = cell->face(face_n)->center();
+      if (std::abs(face_center[0]) < 1.0e-5 &&
+          std::abs(face_center[1] - 3.0) < 1.0e-5)
+        cell->set_all_manifold_ids(numbers::flat_manifold_id);
+    }
+
+triangulation.refine_global(1);
+@endcode
+
+This gives us the following grid:
+
+<img src="https://www.dealii.org/images/steps/developer/step-49.yuhan.10.png"
+     alt="" width="400" height="355">
+
+This gives us a good mesh, where cells at the center of each circle are still
+Cartesian and cells around the boundary lie along a circle. We can really see
+the nice detail of the boundary fitted mesh if we refine two more times:
+
+<img src="https://www.dealii.org/images/steps/developer/step-49.yuhan.11.png"
+     alt="" width="400" height="355">
